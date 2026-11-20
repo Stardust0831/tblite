@@ -138,7 +138,8 @@ module tblite_cli_help
       "      --mixer damping=<real>"//nl//&
       "                           Damping parameter for the electronic mixer"//nl//&
       "      --solver <name>      Electronic solver for SCF, possible options:"//nl//&
-      "                           gvd (default), and gvr"//nl//&
+      "                           gvd (default), gvr, gvd-gpu (if compiled with GPU support)"//nl//&
+      "                           DMP solvers: sp2, sp2-accel, trs4"//nl//&
       "      --efield <real>,<real>,<real>"//nl//&
       "                           Homogeneous electric field in V/Å."//nl//&
       "      --alpb <name>        Use analytical linearized Poisson-Boltzmann (ALPB) solvation model."//nl//&

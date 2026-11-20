@@ -244,3 +244,20 @@ if get_option('ddx')
     dependencies: [ddx_dep],
   )
 endif
+
+has_gpu = false
+if has_cc and not gpu.disabled()
+  cuda_dep = dependency('cuda', language: 'c', modules: ['cudart', 'cusolver', 'cublas'], required: gpu)
+  has_gpu = cuda_dep.found()
+  if has_gpu
+    lib_deps += cuda_dep
+    add_project_arguments('-DUSE_CUDA', language: ['c', 'fortran'])
+  endif
+endif
+if get_option('gambits')
+  # The v0.2.0 source tag identifies itself as version 0.1.0.
+  gambits_dep = dependency('gambits', fallback: ['gambits', 'gambits_dep'],
+    default_options: ['default_library=static', 'api_fortran=true', 'gpu=' + (has_gpu ? 'enabled' : 'disabled')])
+  lib_deps += gambits_dep
+  add_project_arguments('-DTBLITE_HAS_GAMBITS=1', language: 'fortran')
+endif

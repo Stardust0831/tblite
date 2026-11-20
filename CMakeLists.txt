@@ -28,6 +28,9 @@ include(GNUInstallDirs)
 
 # General configuration information
 add_subdirectory("config")
+if(TBLITE_WITH_GAMBITS)
+  enable_language(CXX)
+endif()
 
 if(NOT TARGET "OpenMP::OpenMP_Fortran")
   if(TBLITE_WITH_OpenMP)
@@ -95,6 +98,15 @@ if(TBLITE_WITH_DDX AND NOT TARGET "ddx")
   find_package("ddX" 1.0.2 REQUIRED)
 endif()
   
+
+if(GPU)
+  find_package(CUDAToolkit REQUIRED)
+endif()
+if(TBLITE_WITH_GAMBITS AND NOT TARGET "gambits::gambits")
+  set(FORTRAN_API ON)
+  find_package("gambits" REQUIRED)
+endif()
+
 set(
   lib-deps
   "OpenMP::OpenMP_Fortran"
@@ -142,6 +154,15 @@ if(TBLITE_WITH_DDX)
     PUBLIC
     "TBLITE_HAS_DDX=1"
   )
+endif()
+if(GPU)
+  target_compile_definitions("${PROJECT_NAME}-lib" PRIVATE USE_CUDA)
+  target_link_libraries("${PROJECT_NAME}-lib" PRIVATE CUDA::cusolver CUDA::cublas CUDA::cudart)
+endif()
+if(TBLITE_WITH_GAMBITS)
+  target_compile_definitions("${PROJECT_NAME}-lib" PRIVATE TBLITE_HAS_GAMBITS=1)
+  target_include_directories("${PROJECT_NAME}-lib" PRIVATE ${gambits_INCLUDE_DIRS})
+  target_link_libraries("${PROJECT_NAME}-lib" PUBLIC gambits::gambits)
 endif()
 if(TBLITE_WITH_HDF5)
   target_link_libraries(

@@ -26,6 +26,9 @@ module tblite_api_context
    use tblite_api_utils, only : f_c_character
    use tblite_api_version, only : namespace
    use tblite_context, only : context_type, context_logger, context_terminal
+   use tblite_lapack_solver, only : lapack_solver
+   use tblite_purification_solver_context, only : purification_solver_context, dmp_input
+   use tblite_features, only : tblite_has_gambits, tblite_has_cuda
    implicit none
    private
 
@@ -33,6 +36,7 @@ module tblite_api_context
    public :: new_context_api, check_context_api, get_context_error_api, delete_context_api
    public :: set_context_logger_api, set_context_color_api, set_context_verbosity_api
    public :: set_context_partition_api, set_context_mpi_api
+   public :: set_context_solver_api
 
 
    !> Void pointer to manage calculation context
@@ -174,6 +178,44 @@ subroutine set_context_verbosity_api(vctx, verbosity) &
    end if
 end subroutine set_context_verbosity_api
 
+subroutine set_context_solver_api(vctx, solver) &
+   & bind(C, name=namespace//"set_context_solver")
+   type(c_ptr), value :: vctx
+   type(vp_context), pointer :: ctx
+   integer(c_int), value :: solver
+   type(error_type), allocatable :: error
+   type(dmp_input) :: dmp_inp
+
+   if (debug) print '("[Info]", 1x, a)', "set_context_solver"
+
+   if (c_associated(vctx)) then
+      call c_f_pointer(vctx, ctx)
+      select case(solver)
+      case(1,2,3)
+         if (solver == 3 .and. .not.tblite_has_cuda) then
+            call fatal_error(error, "GPU diagonalization requires a build with CUDA")
+            call ctx%ptr%set_error(error)
+            return
+         end if
+         ctx%ptr%solver = lapack_solver(solver)
+      case(12,14,22)
+         if (.not.tblite_has_gambits) then
+            call fatal_error(error, "Density matrix purification requires a build with GAMBITS")
+            call ctx%ptr%set_error(error)
+            return
+         end if
+         dmp_inp%type = solver - 10 
+         ctx%ptr%solver = purification_solver_context(dmp_inp)
+      case default
+         allocate(error)
+         error%message = "Invalid solver type"
+         call ctx%ptr%set_error(error)
+         return
+      end select
+   
+   end if
+   end subroutine set_context_solver_api
+
 
 !> Assign an externally managed share of the interaction loops to the context
 subroutine set_context_partition_api(vctx, part, nparts) &
@@ -224,7 +266,6 @@ subroutine delete_context_api(vctx) &
 
    if (c_associated(vctx)) then
       call c_f_pointer(vctx, ctx)
-
       deallocate(ctx)
       vctx = c_null_ptr
    end if

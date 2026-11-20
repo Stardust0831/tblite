@@ -117,7 +117,7 @@ jobs:
         run: python -m cibuildwheel --output-dir . *.tar.gz
         env:
           CIBW_PLAT: ${{ contains(matrix.os, 'macos') && '-Dlapack=openblas' || '' }}
-          CIBW_CONFIG_SETTINGS: setup-args="-Dtblite:openmp=false"
+          CIBW_CONFIG_SETTINGS: setup-args="-Dtblite:openmp=false" setup-args="-Dtblite:lapack=openblas" setup-args="-Dlapack=openblas"
           # Exclude libgomp from the manylinux wheel so it doesn't collide with
           # another wheel's bundled libgomp (e.g. torch <= 2.6, see #340).
           # libgomp1 is part of gcc-runtime and present on every supported distro.
@@ -130,9 +130,9 @@ jobs:
           CIBW_ENABLE: pypy pypy-eol
           # Control verbosity of the 'pip wheel' output
           CIBW_BUILD_VERBOSITY: 1
-          CIBW_BEFORE_ALL_LINUX: yum install -y lapack-devel
-          # Delete all other (=/= gcc-15) GCC versions to avoid conflicts in delocation of the wheel
-          # MM: 'openblas' from brew requires gcc@15, using a different version for building leads to delocation errors
+          CIBW_BEFORE_ALL_LINUX: yum install -y openblas-devel lapack-devel
+          # Delete all other (=/= gcc-14) GCC versions to avoid conflicts in delocation of the wheel
+          # MM: 'openblas' from brew requires gcc@14, using a different version for building leads to delocation errors
           # MM: gcc@14 needs macOS14
           CIBW_BEFORE_ALL_MACOS: |
             brew uninstall gcc@13

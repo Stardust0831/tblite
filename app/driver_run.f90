@@ -49,6 +49,7 @@ module tblite_driver_run
    use tblite_xtb_gfn2, only : new_gfn2_calculator, export_gfn2_param
    use tblite_xtb_ipea1, only : new_ipea1_calculator, export_ipea1_param
    use tblite_xtb_singlepoint, only : xtb_singlepoint
+   use tblite_purification_solver_context, only : purification_solver_context
 
    implicit none
    private
@@ -89,7 +90,11 @@ subroutine run_main(config, error)
    class(post_processing_list), allocatable :: post_proc
 
    ctx%terminal = context_terminal(config%color)
-   ctx%solver = lapack_solver(config%solver)
+   if (allocated(config%dmp_input)) then
+      ctx%solver = purification_solver_context(config%dmp_input)
+   else
+      ctx%solver = lapack_solver(config%solver)
+   end if
 
    ! a single rank owns the complete work, so this is a no-op outside mpiexec
    if (tblite_has_mpi) then
@@ -99,7 +104,6 @@ subroutine run_main(config, error)
 
    verbosity = config%verbosity
    if (ctx%partition%get_part() > 0) verbosity = 0
-
    if (config%input == "-") then
       if (allocated(config%input_format)) then
          call read_structure(mol, input_unit, config%input_format, error)

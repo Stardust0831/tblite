@@ -25,11 +25,13 @@ program tester
    use test_coulomb_charge, only : collect_coulomb_charge
    use test_coulomb_multipole, only : collect_coulomb_multipole
    use test_coulomb_thirdorder, only : collect_coulomb_thirdorder
+   use test_density_matrix_purification, only : collect_DMP
    use test_dispersion, only : collect_dispersion
    use test_double_dictionary, only : collect_double_dictionary
    use test_fit, only : collect_fit
    use test_gfn1_xtb, only : collect_gfn1_xtb
    use test_gfn2_xtb, only : collect_gfn2_xtb
+   use test_gpu_solver, only : collect_gpu_solver
    use test_halogen, only : collect_halogen
    use test_hamiltonian, only : collect_hamiltonian
    use test_hdf5, only : collect_hdf5
@@ -97,9 +99,11 @@ program tester
       new_testsuite("ceh", collect_ceh), &
       new_testsuite("ipea1-xtb", collect_ipea1_xtb), &
       new_testsuite("gfn2-xtb", collect_gfn2_xtb), &
+      new_testsuite("gpu-solver", collect_gpu_solver), &
       new_testsuite("xtb-external", collect_xtb_external), &
       new_testsuite("spin", collect_spin), &
       new_testsuite("xtb-param", collect_xtb_param), &
+      new_testsuite("density-matrix-purification", collect_DMP), &
       new_testsuite("xtbml", collect_xtbml) &
       ]
 

@@ -28,6 +28,8 @@ module tblite_cli
    use tblite_solvation, only: alpb_input, born_kernel, cds_input, ddx_input, &
       & ddx_solvation_model, get_solvent_data, shift_input, solution_state, &
       & solvation_input, solvent_data
+   use tblite_purification_solver_context, only : dmp_input, purification_type, &
+      & purification_runmode, purification_precision
    use tblite_version, only : get_tblite_version
    use tblite_xtb_calculator, only : xtb_config
    implicit none
@@ -104,6 +106,8 @@ module tblite_cli
       integer :: solver = lapack_algorithm%gvd
       !> Configuration for xtb calculator
       type(xtb_config) :: cfg = xtb_config()
+      !> Purifcation solver
+      type(dmp_input), allocatable :: dmp_input
    end type run_config
 
    !> Configuration for evaluating tight binding model on input structure
@@ -271,6 +275,8 @@ subroutine get_run_arguments(config, list, start, error)
 
    integer :: iarg, narg, mixer_sep, comma_count, ich, ieq
    logical :: getopts
+   logical :: dmp_solver, dmp_options, explicit_etemp
+   type(dmp_input) :: dmp
    character(len=:), allocatable :: arg, sec, mixer_name
    real(wp) :: anneal_input(3)
    logical :: solvent_not_found, parametrized_solvation
@@ -279,6 +285,9 @@ subroutine get_run_arguments(config, list, start, error)
    integer, allocatable :: kernel, sol_state
    type(solvent_data), allocatable :: solvent
 
+   dmp_solver = .false.
+   dmp_options = .false.
+   explicit_etemp = .false.
    iarg = start
    getopts = .true.
    narg = len(list)
@@ -615,17 +624,75 @@ subroutine get_run_arguments(config, list, start, error)
             exit
          end if
 
+         dmp_solver = .false.
          select case(arg)
          case default
             call fatal_error(error, "Unknown electronic solver '"//arg//"' specified")
             exit
          case("gvd")
             config%solver = lapack_algorithm%gvd
+         case("gvd-gpu")
+            config%solver = lapack_algorithm%gvd_cusolver
          case("gvr")
             config%solver = lapack_algorithm%gvr
+         case("tc2","sp2")
+            dmp_solver = .true.
+            dmp%type = purification_type%tc2
+         case("tc2-accel","sp2-accel")
+            dmp_solver = .true.
+            dmp%type = purification_type%tc2accel
+         case("trs4")
+            dmp_solver = .true.
+            dmp%type = purification_type%trs4
          end select
 
+      case("--purification-runmode")
+         dmp_options = .true.
+         iarg = iarg +1
+         call list%get(iarg, arg)
+         if (.not.allocated(arg)) then
+            call fatal_error(error, "Missing argument for purification runmode")
+            exit
+         end if
+
+         select case(arg)
+         case("gpu")
+            dmp%runmode = purification_runmode%gpu
+         case("cpu")
+            dmp%runmode = purification_runmode%cpu
+         case("default", "auto")
+            dmp%runmode = purification_runmode%default
+         case default
+            call fatal_error(error, "Unknown purification run mode '"//arg//"'")
+            exit
+         end select
+
+      case("--purification-precision")
+         dmp_options = .true.
+         iarg = iarg +1
+         call list%get(iarg, arg)
+         if (.not.allocated(arg)) then
+            call fatal_error(error, "Missing argument for purification precision")
+            exit
+         end if
+
+         select case(arg)
+         case("double")
+            dmp%precision = purification_precision%double
+         case("single")
+            dmp%precision = purification_precision%single
+         case("mixed")
+            dmp%precision = purification_precision%mixed
+         case("mixed-fp16")
+            dmp%precision = purification_precision%mixed_fp16
+         case default
+            call fatal_error(error, "Unknown purification precision '"//arg//"'")
+            exit
+         end select
+
+
       case("--etemp")
+         explicit_etemp = .true.
          iarg = iarg + 1
          call list%get(iarg, arg)
          call get_argument_as_real(arg, config%etemp, error)
@@ -734,6 +801,26 @@ subroutine get_run_arguments(config, list, start, error)
          end if
       end select
    end do
+
+   if (allocated(error)) return
+   if (dmp_solver) then
+      if (.not.get_tblite_feature("gambits")) then
+         call fatal_error(error, "Density matrix purification requires a build with GAMBITS")
+         return
+      end if
+      if (.not.explicit_etemp) config%etemp = 0.0_wp
+      if (config%etemp /= 0.0_wp .or. allocated(config%mixer%anneal)) then
+         call fatal_error(error, "Density matrix purification requires zero electronic temperature")
+         return
+      end if
+      config%dmp_input = dmp
+   else if (dmp_options) then
+      call fatal_error(error, "Purification options require a purification solver")
+      return
+   else if (config%solver == lapack_algorithm%gvd_cusolver .and. .not.get_tblite_feature("cuda")) then
+      call fatal_error(error, "GPU diagonalization requires a build with CUDA")
+      return
+   end if
 
    if (.not.(allocated(config%input))) then
       if (.not.allocated(error)) then
