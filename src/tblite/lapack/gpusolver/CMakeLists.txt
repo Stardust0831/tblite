@@ -23,5 +23,8 @@ list(
 if(GPU)
   list(APPEND srcs "${dir}/cuda.c")
 endif()
+if(TBLITE_WITH_CUSOLVERMP)
+  list(APPEND srcs "${dir}/cusolvermp.c")
+endif()
 
 set(srcs "${srcs}" PARENT_SCOPE)

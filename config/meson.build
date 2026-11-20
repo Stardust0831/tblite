@@ -261,3 +261,10 @@ if get_option('gambits')
   lib_deps += gambits_dep
   add_project_arguments('-DTBLITE_HAS_GAMBITS=1', language: 'fortran')
 endif
+if get_option('cusolvermp')
+  if not (has_gpu and get_option('mpi') and get_option('scalapack'))
+    error('cusolvermp requires gpu, mpi, and scalapack')
+  endif
+  lib_deps += [dependency('mpi', language: 'c'), cc.find_library('cusolverMp'), cc.find_library('nccl')]
+  add_project_arguments('-DTBLITE_HAS_CUSOLVERMP=1', language: ['c', 'fortran'])
+endif

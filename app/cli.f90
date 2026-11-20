@@ -633,6 +633,8 @@ subroutine get_run_arguments(config, list, start, error)
             config%solver = lapack_algorithm%gvd
          case("gvd-gpu")
             config%solver = lapack_algorithm%gvd_cusolver
+         case("gvd-mp")
+            config%solver = lapack_algorithm%gvd_cusolvermp
          case("gvr")
             config%solver = lapack_algorithm%gvr
          case("tc2","sp2")
@@ -819,6 +821,9 @@ subroutine get_run_arguments(config, list, start, error)
       return
    else if (config%solver == lapack_algorithm%gvd_cusolver .and. .not.get_tblite_feature("cuda")) then
       call fatal_error(error, "GPU diagonalization requires a build with CUDA")
+      return
+   else if (config%solver == lapack_algorithm%gvd_cusolvermp .and. .not.get_tblite_feature("cusolvermp")) then
+      call fatal_error(error, "gvd-mp requires a build with cuSOLVERMp")
       return
    end if
 
@@ -1352,6 +1357,7 @@ subroutine version(unit)
    write(unit, "(a, 1x, a)") "HDF5 support:", merge("enabled ", "disabled", get_tblite_feature("hdf5"))
    write(unit, "(a, 1x, a)") "TREXIO support:", merge("enabled ", "disabled", get_tblite_feature("trexio"))
    write(unit, "(a, 1x, a)") "MPI support:", merge("enabled ", "disabled", get_tblite_feature("mpi"))
+   write(unit, "(a, 1x, a)") "cuSOLVERMp support:", merge("enabled ", "disabled", get_tblite_feature("cusolvermp"))
 
 end subroutine version
 

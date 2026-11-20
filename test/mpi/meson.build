@@ -23,6 +23,10 @@ mpi_tester = executable(
 
 mpirun = find_program('mpirun', 'mpiexec', required: false)
 if mpirun.found()
+  if get_option('cusolvermp')
+    test('cusolvermp', mpirun, args: ['-n', '2', mpi_tester.full_path(), 'cusolvermp'],
+         suite: 'mpi', timeout: 120)
+  endif
   test(
     'mpi-singlepoint',
     mpirun,

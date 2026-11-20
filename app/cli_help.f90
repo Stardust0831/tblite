@@ -139,6 +139,8 @@ module tblite_cli_help
       "                           Damping parameter for the electronic mixer"//nl//&
       "      --solver <name>      Electronic solver for SCF, possible options:"//nl//&
       "                           gvd (default), gvr, gvd-gpu (if compiled with GPU support)"//nl//&
+      "                           gvd-mp (cuSOLVERMp, one MPI rank per GPU)"//nl//&
+      "                           For small grids gvd-mp solves on the root GPU with cuSOLVERDn."//nl//&
       "                           DMP solvers: sp2, sp2-accel, trs4"//nl//&
       "      --efield <real>,<real>,<real>"//nl//&
       "                           Homogeneous electric field in V/Å."//nl//&

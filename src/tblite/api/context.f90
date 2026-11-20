@@ -28,7 +28,7 @@ module tblite_api_context
    use tblite_context, only : context_type, context_logger, context_terminal
    use tblite_lapack_solver, only : lapack_solver
    use tblite_purification_solver_context, only : purification_solver_context, dmp_input
-   use tblite_features, only : tblite_has_gambits, tblite_has_cuda
+   use tblite_features, only : tblite_has_gambits, tblite_has_cuda, tblite_has_cusolvermp
    implicit none
    private
 
@@ -191,7 +191,12 @@ subroutine set_context_solver_api(vctx, solver) &
    if (c_associated(vctx)) then
       call c_f_pointer(vctx, ctx)
       select case(solver)
-      case(1,2,3)
+      case(1,2,3,4)
+         if (solver == 4 .and. .not.tblite_has_cusolvermp) then
+            call fatal_error(error, "Distributed GPU diagonalization requires cuSOLVERMp")
+            call ctx%ptr%set_error(error)
+            return
+         end if
          if (solver == 3 .and. .not.tblite_has_cuda) then
             call fatal_error(error, "GPU diagonalization requires a build with CUDA")
             call ctx%ptr%set_error(error)

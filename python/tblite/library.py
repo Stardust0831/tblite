@@ -130,6 +130,7 @@ def set_context_solver(ctx, calc, solver : str):
         "gvd": 1,
         "gvr": 2,
         "gvd-gpu": 3,
+        "gvd-mp": 4,
         "sp2": 12,
         "tc2": 12,
         "sp2-accel": 22,

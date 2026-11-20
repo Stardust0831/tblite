@@ -98,10 +98,20 @@ program test_mpi_singlepoint
       & .true.,  .false., .false., & ! Release column matrices
       & .true.,  .true.,  .false.], [3, 6])
    integer :: stat, nspin, icase, rank, nranks
+   character(len=16) :: suite
 
    call MPI_Init(stat)
    call MPI_Comm_rank(MPI_COMM_WORLD, rank, stat)
    call MPI_Comm_size(MPI_COMM_WORLD, nranks, stat)
+   call get_command_argument(1, suite)
+   if (suite == "cusolvermp") then
+      call check_eigensolver(5, .true.)
+      call check_eigensolver(129, .true.)
+      call check_density(5, 2, .true.)
+      call check_density(129, 2, .true.)
+      call MPI_Finalize(stat)
+      stop
+   end if
 
    call get_structure(mol, "MB16-43", "01")
    allocate(serial_gradient(3, mol%nat), mpi_gradient(3, mol%nat))
@@ -340,8 +350,9 @@ contains
 
    !> The distributed eigensolver has to reproduce the eigenvalues of the
    !> replicated one for the block sizes and process grids it picks
-   subroutine check_eigensolver(n)
+   subroutine check_eigensolver(n, use_cusolvermp)
       integer, intent(in) :: n
+      logical, intent(in), optional :: use_cusolvermp
       real(wp) :: amat(n, n), bmat(n, n), work(n, n)
       real(wp) :: hmat(n, n), eval(n), reference(n), nel(2)
       type(sygvd_solver) :: serial
@@ -365,7 +376,7 @@ contains
 
       nel = [real(n, wp), real(n, wp)]
       call new_sygvd(serial, bmat, nel, 0.0_wp)
-      call new_psygvd(distributed, bmat, nel, 0.0_wp, MPI_COMM_WORLD%MPI_VAL)
+      call new_psygvd(distributed, bmat, nel, 0.0_wp, MPI_COMM_WORLD%MPI_VAL, use_cusolvermp)
       do iteration = 1, 3
          ! Reuse the grid for a different Hamiltonian, as in successive SCF steps.
          amat(1, 1) = amat(1, 1) + 0.1_wp
@@ -540,8 +551,9 @@ contains
    end subroutine check_hamiltonian
 
    !> Occupied/partially occupied orbitals, both spins and signed energy weights.
-   subroutine check_density(n, nspin)
+   subroutine check_density(n, nspin, use_cusolvermp)
       integer, intent(in) :: n, nspin
+      logical, intent(in), optional :: use_cusolvermp
       type(sygvd_solver) :: serial
       type(psygvd_solver) :: distributed
       real(wp) :: hs(n, n, nspin), hd(n, n, nspin), smat(n, n), nel(2)
@@ -567,7 +579,7 @@ contains
       hc = hs(:, columns(1):columns(2), :)
       nel = [0.45_wp*n, 0.35_wp*n]
       call new_sygvd(serial, smat, nel, 0.3_wp)
-      call new_psygvd(distributed, smat, nel, 0.3_wp, MPI_COMM_WORLD%MPI_VAL)
+      call new_psygvd(distributed, smat, nel, 0.3_wp, MPI_COMM_WORLD%MPI_VAL, use_cusolvermp)
       call serial%get_density(hs, smat, es, fs, ps, error)
       call check_error(error)
       call distributed%get_density(hd, smat, ed, fd, pd, error)
@@ -575,7 +587,7 @@ contains
       call assert(all(abs(ps-pd) < thr), "density matrix")
       call assert(all(abs(fs-fd) < thr), "orbital occupations")
       call distributed%delete()
-      call new_psygvd(distributed, smat(:, columns(1):columns(2)), nel, 0.3_wp, MPI_COMM_WORLD%MPI_VAL)
+      call new_psygvd(distributed, smat(:, columns(1):columns(2)), nel, 0.3_wp, MPI_COMM_WORLD%MPI_VAL, use_cusolvermp)
       allocate(pc(n, size(hc, 2), nspin))
       call distributed%get_density(hc, smat(:, columns(1):columns(2)), ed, fd, pc, error)
       call check_error(error)

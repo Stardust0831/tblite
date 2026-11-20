@@ -30,10 +30,14 @@
 !> Without ScaLAPACK support the solver reports an error instead of falling back
 !> to a replicated diagonalization.
 module tblite_lapack_scalapack
+   use iso_c_binding, only : c_ptr, c_null_ptr, c_associated, c_int, c_double, c_char, c_null_char
    use mctc_env, only : sp, dp, wp, error_type, fatal_error
-   use tblite_features, only : tblite_has_scalapack
+   use tblite_features, only : tblite_has_scalapack, tblite_has_cusolvermp
    use tblite_mpi_utils, only : get_mpi_comm_world, mpi_allreduce_sum, &
-      & new_mpi_work_partition
+      & new_mpi_work_partition, mpi_sync_error
+#if TBLITE_HAS_CUSOLVERMP
+   use tblite_cusolver_sygvd, only : sygvd_cusolver
+#endif
    use tblite_output_format, only : format_string
    use tblite_partition, only : work_partition
    use tblite_scf_diag, only : diag_solver_type
@@ -41,6 +45,28 @@ module tblite_lapack_scalapack
    private
 
    public :: psygvd_solver, new_psygvd, distribute_diagonalization
+
+#if TBLITE_HAS_CUSOLVERMP
+   interface
+      integer(c_int) function mp_create(handle, comm, n, nb, npcol, lld, ncol, msg) bind(C, name="tblite_mp_create")
+         import :: c_int, c_ptr, c_char
+         type(c_ptr), intent(out) :: handle
+         integer(c_int), value :: comm, n, nb, npcol, lld, ncol
+         character(kind=c_char), intent(out) :: msg(*)
+      end function
+      integer(c_int) function mp_solve(handle, h, s, eval, z, msg) bind(C, name="tblite_mp_solve")
+         import :: c_int, c_ptr, c_double, c_char
+         type(c_ptr), value :: handle
+         real(c_double), intent(in) :: h(*), s(*)
+         real(c_double), intent(out) :: eval(*), z(*)
+         character(kind=c_char), intent(out) :: msg(*)
+      end function
+      subroutine mp_delete(handle) bind(C, name="tblite_mp_delete")
+         import :: c_ptr
+         type(c_ptr), value :: handle
+      end subroutine
+   end interface
+#endif
 
 #if TBLITE_HAS_SCALAPACK
    interface
@@ -210,6 +236,13 @@ module tblite_lapack_scalapack
    type, extends(diag_solver_type) :: psygvd_solver
       !> Communicator the diagonalization is distributed over
       integer :: comm = 0
+      logical :: use_cusolvermp = .false.
+      type(c_ptr) :: mp_handle = c_null_ptr
+#if TBLITE_HAS_CUSOLVERMP
+      !> Single-block descriptor and root solver for grids too small for cuSOLVERMp.
+      integer :: root_desc(9) = 0
+      type(sygvd_cusolver), allocatable :: root_solver
+#endif
       !> BLACS context of the process grid, negative until the grid is created
       integer :: ctxt = -1
       !> BLACS context for contiguous column blocks, negative until created
@@ -291,7 +324,7 @@ end function distribute_diagonalization
 
 !> Create a distributed eigenvalue solver, the process grid is set up on the
 !> first solve where errors can be reported
-subroutine new_psygvd(self, overlap, nel, kt, comm)
+subroutine new_psygvd(self, overlap, nel, kt, comm, use_cusolvermp)
    !> Instance of the distributed solver
    type(psygvd_solver), intent(out) :: self
    !> Overlap matrix
@@ -301,13 +334,16 @@ subroutine new_psygvd(self, overlap, nel, kt, comm)
    !> Electronic temperature
    real(wp), intent(in) :: kt
    !> Communicator to distribute the diagonalization over
-   integer, intent(in) :: comm
+   integer, intent(in), optional :: comm
+   logical, intent(in), optional :: use_cusolvermp
 
    self%n = size(overlap, 1)
    self%local_columns = size(overlap, 2) /= self%n
    self%nel = nel
    self%kt = kt
-   self%comm = comm
+   self%comm = -1
+   if (present(comm)) self%comm = comm
+   if (present(use_cusolvermp)) self%use_cusolvermp = use_cusolvermp
 end subroutine new_psygvd
 
 
@@ -350,6 +386,16 @@ subroutine setup_grid(self, error)
 
    ! a block larger than the share of a process row leaves ranks without work
    nb = max(1, min(default_block_size, self%n/max(nprow, self%npcol)))
+#if TBLITE_HAS_CUSOLVERMP
+   if (self%use_cusolvermp .and. nb < default_block_size) then
+      call descinit(self%root_desc, self%n, self%n, self%n, self%n, 0, 0, self%ctxt, self%n, stat)
+      if (stat /= 0) then
+         call handle_info(error, "root descinit", stat)
+         return
+      end if
+      if (myrow == 0 .and. mycol == 0) allocate(self%root_solver)
+   end if
+#endif
    ! Build the block-cyclic index maps once, then scatter/gather by indexing.
    self%rows = [(((i-1)/nb*nprow + myrow)*nb + modulo(i-1, nb) + 1, &
       & i=1, numroc(self%n, nb, myrow, 0, nprow))]
@@ -381,8 +427,20 @@ subroutine solve_dp(self, hmat, smat, eval, error)
    !> Error handling
    type(error_type), allocatable, intent(out) :: error
 
-   real(dp) :: scale, wquery(1), changed(1)
-   integer :: info, lwork, liwork, trilwmin, ormlwmin, iquery(1), mloc, nloc, nb
+   real(dp) :: changed(1)
+   integer :: info, mloc, nloc
+#if TBLITE_HAS_CUSOLVERMP
+   character(kind=c_char, len=256) :: message
+#endif
+
+   if (self%use_cusolvermp .and. .not.tblite_has_cusolvermp) then
+      call fatal_error(error, "gvd-mp requires a build with cuSOLVERMp")
+      return
+   end if
+   if (self%use_cusolvermp .and. self%comm == -1) then
+      call fatal_error(error, "gvd-mp requires an MPI context; call ctx%set_mpi before the calculation")
+      return
+   end if
 
 #if TBLITE_HAS_SCALAPACK
    if (self%ctxt < 0) then
@@ -392,7 +450,6 @@ subroutine solve_dp(self, hmat, smat, eval, error)
 
    mloc = size(self%rows)
    nloc = size(self%cols)
-   nb = self%desc(5)
    if (.not.allocated(self%aloc)) then
       allocate(self%aloc(max(1, mloc), max(1, nloc)), &
          & self%bloc(max(1, mloc), max(1, nloc)), self%zloc(max(1, mloc), max(1, nloc)), &
@@ -430,14 +487,90 @@ subroutine solve_dp(self, hmat, smat, eval, error)
          self%overlap = smat(self%rows, self%cols)
          self%bloc(:mloc, :nloc) = self%overlap
       end if
-      call pdpotrf("u", self%n, self%bloc, 1, 1, self%desc, info)
-      if (info /= 0) then
-         call handle_info(error, "pdpotrf", info)
-         return
+      if (.not.self%use_cusolvermp) then
+         call pdpotrf("u", self%n, self%bloc, 1, 1, self%desc, info)
+         if (info /= 0) then
+            call handle_info(error, "pdpotrf", info)
+            return
+         end if
       end if
       self%overlap_valid = .true.
    end if
 
+#if TBLITE_HAS_CUSOLVERMP
+   if (self%root_desc(1) /= 0) then
+      call solve_small_gpu(self, eval, error)
+      if (allocated(error)) return
+   else if (self%use_cusolvermp) then
+      info = 0
+      if (.not.c_associated(self%mp_handle)) then
+         info = mp_create(self%mp_handle, int(self%comm,c_int), int(self%n,c_int), int(self%desc(5),c_int), &
+            & int(self%npcol,c_int), int(self%desc(9),c_int), int(nloc,c_int), message)
+      end if
+      if (info == 0) info = mp_solve(self%mp_handle, self%aloc, self%bloc, eval, self%zloc, message)
+      if (info /= 0) then
+         call fatal_error(error, "gvd-mp: "//message(:index(message, c_null_char)-1))
+         return
+      end if
+   else
+#endif
+      call diagonalize_scalapack(self, eval, error)
+      if (allocated(error)) return
+#if TBLITE_HAS_CUSOLVERMP
+   end if
+#endif
+
+   if (self%local_columns) then
+      call pdgemr2d(self%n, self%n, self%zloc, 1, 1, self%desc, hmat, &
+         & 1, 1, self%column_desc, self%ctxt)
+   else
+      hmat(:, :) = 0.0_dp
+      hmat(self%rows, self%cols) = self%zloc(:mloc, :nloc)
+      call mpi_allreduce_sum(error, hmat, self%comm)
+   end if
+#else
+   call fatal_error(error, no_scalapack)
+#endif
+end subroutine solve_dp
+
+#if TBLITE_HAS_CUSOLVERMP
+! cuSOLVERMp 0.7.2 can return zero eigenvectors with success on undersized
+! tiles (e.g. N=5, NB=2). Use one GPU until a full tile fits each grid line.
+subroutine solve_small_gpu(self, eval, error)
+   class(psygvd_solver), intent(inout) :: self
+   real(dp), contiguous, intent(inout) :: eval(:)
+   type(error_type), allocatable, intent(out) :: error
+   real(dp), allocatable :: h(:, :), s(:, :)
+   integer :: nroot
+
+   nroot = merge(self%n, 1, allocated(self%root_solver))
+   allocate(h(nroot, nroot), s(nroot, nroot))
+   call pdgemr2d(self%n, self%n, self%aloc, 1, 1, self%desc, h, 1, 1, self%root_desc, self%ctxt)
+   call pdgemr2d(self%n, self%n, self%bloc, 1, 1, self%desc, s, 1, 1, self%root_desc, self%ctxt)
+   if (allocated(self%root_solver)) then
+      call self%root_solver%solve(h, s, eval, error)
+   else
+      eval = 0.0_dp
+   end if
+   call mpi_sync_error(error, self%comm)
+   if (allocated(error)) return
+   call mpi_allreduce_sum(error, eval, self%comm)
+   if (allocated(error)) return
+   call pdgemr2d(self%n, self%n, h, 1, 1, self%root_desc, self%zloc, 1, 1, self%desc, self%ctxt)
+end subroutine solve_small_gpu
+#endif
+
+#if TBLITE_HAS_SCALAPACK
+subroutine diagonalize_scalapack(self, eval, error)
+   class(psygvd_solver), intent(inout) :: self
+   real(dp), contiguous, intent(inout) :: eval(:)
+   type(error_type), allocatable, intent(out) :: error
+   real(dp) :: scale, wquery(1)
+   integer :: info, lwork, liwork, trilwmin, ormlwmin, iquery(1), mloc, nloc, nb
+
+   mloc = size(self%rows)
+   nloc = size(self%cols)
+   nb = self%desc(5)
    call pdsygst(1, "u", self%n, self%aloc, 1, 1, self%desc, self%bloc, 1, 1, self%desc, &
       & scale, info)
    if (info /= 0) then
@@ -474,18 +607,8 @@ subroutine solve_dp(self, hmat, smat, eval, error)
    call pdtrsm("l", "u", "n", "n", self%n, self%n, 1.0_dp, self%bloc, 1, 1, &
       & self%desc, self%zloc, 1, 1, self%desc)
 
-   if (self%local_columns) then
-      call pdgemr2d(self%n, self%n, self%zloc, 1, 1, self%desc, hmat, &
-         & 1, 1, self%column_desc, self%ctxt)
-   else
-      hmat(:, :) = 0.0_dp
-      hmat(self%rows, self%cols) = self%zloc(:mloc, :nloc)
-      call mpi_allreduce_sum(error, hmat, self%comm)
-   end if
-#else
-   call fatal_error(error, no_scalapack)
+end subroutine diagonalize_scalapack
 #endif
-end subroutine solve_dp
 
 
 !> Build P (or energy-weighted P) entirely on the 2-D grid. The public
@@ -552,6 +675,15 @@ end subroutine solve_sp
 subroutine delete(self)
    !> Instance of the distributed solver
    class(psygvd_solver), intent(inout) :: self
+
+#if TBLITE_HAS_CUSOLVERMP
+   if (c_associated(self%mp_handle)) then
+      call mp_delete(self%mp_handle)
+      self%mp_handle = c_null_ptr
+   end if
+   if (allocated(self%root_solver)) deallocate(self%root_solver)
+   self%root_desc = 0
+#endif
 
 #if TBLITE_HAS_SCALAPACK
    if (self%column_ctxt >= 0) call blacs_gridexit(self%column_ctxt)

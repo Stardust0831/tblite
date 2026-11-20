@@ -44,6 +44,8 @@ typedef enum {
    TBLITE_SOLVER_SYGVR = 2,
    /// cuSolver SYGVD
    TBLITE_SOLVER_CUSOLVER_SYGVD = 3,
+   /// Distributed cuSOLVERMp diagonalization (MPI context, one rank per GPU).
+   TBLITE_SOLVER_CUSOLVERMP_SYGVD = 4,
    /// SP2 purification
    TBLITE_SOLVER_SP2 = 12,
    ///TRS4 purification

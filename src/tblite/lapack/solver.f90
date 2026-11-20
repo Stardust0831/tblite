@@ -40,6 +40,7 @@ module tblite_lapack_solver
       !> Relatively robust solver
       integer :: gvr = 2
       integer :: gvd_cusolver = 3
+      integer :: gvd_cusolvermp = 4
    end type enum_lapack
 
    !> Actual enumerator of possible solvers
@@ -95,6 +96,16 @@ subroutine new(self, solver, overlap, nel, kt, comm)
    real(wp), intent(in) :: kt
    !> Communicator to distribute the diagonalization over, absent keeps it local
    integer, intent(in), optional :: comm
+
+   if (self%algorithm == lapack_algorithm%gvd_cusolvermp) then
+      block
+         type(psygvd_solver), allocatable :: tmp
+         allocate(tmp)
+         call new_psygvd(tmp, overlap, nel, kt, comm, use_cusolvermp=.true.)
+         call move_alloc(tmp, solver)
+      end block
+      return
+   end if
 
    ! the replicated diagonalization is the bottleneck of a distributed run
    if (present(comm)) then

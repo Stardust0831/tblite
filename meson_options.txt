@@ -107,6 +107,7 @@ option(
   yield: true,
 )
 option('gambits', type: 'boolean', value: false, description: 'Enable density matrix purification')
+option('cusolvermp', type: 'boolean', value: false, description: 'Enable distributed GPU diagonalization')
 
 option(
   'gpu_arch', 

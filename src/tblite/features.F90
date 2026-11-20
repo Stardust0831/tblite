@@ -32,6 +32,9 @@
 #ifndef TBLITE_HAS_SCALAPACK
 #define TBLITE_HAS_SCALAPACK 0
 #endif
+#ifndef TBLITE_HAS_CUSOLVERMP
+#define TBLITE_HAS_CUSOLVERMP 0
+#endif
 
 !> @file tblite/features.f90
 !> Provides version and feature information
@@ -48,6 +51,7 @@ module tblite_features
    public :: tblite_has_mpi
    public :: tblite_has_scalapack
    public :: tblite_has_gambits, tblite_has_cuda
+   public :: tblite_has_cusolvermp
 
 
    !> Logical flag indicating if DDX solvation model support is available
@@ -60,6 +64,7 @@ module tblite_features
    logical, parameter :: tblite_has_mpi = TBLITE_HAS_MPI /= 0
    !> Logical flag indicating if ScaLAPACK support is available
    logical, parameter :: tblite_has_scalapack = TBLITE_HAS_SCALAPACK /= 0
+   logical, parameter :: tblite_has_cusolvermp = TBLITE_HAS_CUSOLVERMP /= 0
    logical, parameter :: tblite_has_gambits = TBLITE_HAS_GAMBITS /= 0
 #ifdef USE_CUDA
    logical, parameter :: tblite_has_cuda = .true.
@@ -91,6 +96,8 @@ pure function get_tblite_feature(flag) result(use_feature)
       use_feature = tblite_has_gambits
    case("cuda")
       use_feature = tblite_has_cuda
+   case("cusolvermp")
+      use_feature = tblite_has_cusolvermp
    case default
       use_feature = .false.
    end select
