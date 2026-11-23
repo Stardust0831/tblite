@@ -987,3 +987,15 @@ def test_spin_polarized_restart():
     # Verify iteration count (should be very low, e.g., <= 3)
     # Ideally 1 or 2 if restart is perfect
     assert iterations <= 3, f"Restart took {iterations} iterations, expected <= 3"
+
+
+@pytest.mark.parametrize("solver", ["sp2", "sp2-accel", "trs4"])
+@pytest.mark.skipif(not library.get_feature("gambits"), reason="requires GAMBITS")
+def test_context_solver_api(solver):
+    numbers, positions = get_crcp2()
+    calc = Calculator("GFN1-xTB", numbers, positions)
+    calc.set("temperature", 0.0)
+    calc.set("solver", "gvd")
+    reference = calc.singlepoint().get("energy")
+    calc.set("solver", solver)
+    assert calc.singlepoint().get("energy") == approx(reference, abs=THR * 10)

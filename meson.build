@@ -26,11 +26,12 @@ project(
   ],
 )
 install = not (meson.is_subproject() and get_option('default_library') == 'static')
-has_cc = add_languages('c', required: get_option('api') or get_option('python'), native: false)
-if get_option('ddx')
+has_cc = add_languages('c', required: get_option('api') or get_option('python') or get_option('gpu').enabled(), native: false)
+if get_option('ddx') or get_option('gambits')
   has_cxx = add_languages('cpp', required: true, native: false)
 endif
 
+gpu = get_option('gpu')
 # General configuration information
 lib_deps = []
 inc_dirs = []
@@ -110,6 +111,8 @@ if install
     'CMAKE_INSTALL_INCLUDEDIR': get_option('includedir'),
     'CMAKE_INSTALL_LIBDIR': get_option('libdir'),
     'TBLITE_WITH_API': get_option('api') ? 'ON' : 'OFF',
+    'GPU': has_gpu ? 'ON' : 'OFF',
+    'TBLITE_WITH_GAMBITS': get_option('gambits') ? 'ON' : 'OFF',
     'TBLITE_WITH_OpenMP': get_option('openmp') ? 'ON' : 'OFF',
     'TBLITE_WITH_DDX': get_option('ddx') ? 'ON' : 'OFF',
     'TBLITE_WITH_MPI': get_option('mpi') ? 'ON' : 'OFF',
@@ -136,6 +139,7 @@ if install
       configuration: cmake_data,
     ),
     files('config'/'cmake'/'FindScalapack.cmake'),
+    files('config'/'cmake'/'Findgambits.cmake'),
     files('config'/'cmake'/'FindddX.cmake'),
     files('config'/'cmake'/'Finddftd4.cmake'),
     files('config'/'cmake'/'Findmctc-lib.cmake'),

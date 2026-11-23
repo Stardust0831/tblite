@@ -99,3 +99,19 @@ option(
   value: 'python3',
   description: 'Python version to link against.',
 )
+
+option(
+  'gpu',
+  type: 'feature',
+  value: 'disabled',
+  yield: true,
+)
+option('gambits', type: 'boolean', value: false, description: 'Enable density matrix purification')
+
+option(
+  'gpu_arch', 
+  type: 'array',
+  value: ['native'],
+  yield: true,
+  description: 'GPU architecture version string',
+)

@@ -1,6 +1,8 @@
 @PACKAGE_INIT@
 
 set("TBLITE_WITH_API" @TBLITE_WITH_API@)
+set(TBLITE_WITH_GPU @GPU@)
+set(TBLITE_WITH_GAMBITS @TBLITE_WITH_GAMBITS@)
 set("TBLITE_WITH_OpenMP" @TBLITE_WITH_OpenMP@)
 set("TBLITE_WITH_DDX" @TBLITE_WITH_DDX@)
 set("TBLITE_WITH_TREXIO" @TBLITE_WITH_TREXIO@)
@@ -20,6 +22,13 @@ enable_language("C")
 if(NOT TARGET "@PROJECT_NAME@::@PROJECT_NAME@")
   include(CMakeFindDependencyMacro)
   list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
+  if(TBLITE_WITH_GPU)
+    find_dependency(CUDAToolkit)
+  endif()
+  if(TBLITE_WITH_GAMBITS)
+    enable_language(CXX)
+    find_dependency(gambits)
+  endif()
 
   if(NOT TARGET "OpenMP::OpenMP_Fortran" AND TBLITE_WITH_OpenMP)
     find_dependency("OpenMP")

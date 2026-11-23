@@ -69,6 +69,14 @@ This library depends on several Fortran modules to provide the desired functiona
 .. _mstore: https://github.com/grimme-lab/mstore
 .. _toml-f: https://github.com/toml-f/toml-f
 
+Optional density matrix purification uses the following libraries
+
+- `gambits`_: (Gaming)GPU-Accelerated Matrix-Based ITerative Solvers
+- `lahva`_: The linear algebra backend for GAMBITS that provides GPU-accelerated linear algebra routines
+
+.. _gambits: https://git.rwth-aachen.de/bannwarthlab/gambits
+.. _lahva: https://git.rwth-aachen.de/bannwarthlab/lahva
+
 .. _meson: https://mesonbuild.com
 .. _ninja: https://ninja-build.org
 .. _asciidoctor: https://asciidoctor.org
@@ -96,9 +104,17 @@ To setup a build the following software is required
 Optional dependencies are
 
 - `asciidoctor`_, to build the manual pages
-- A C compiler to test the C API and compile the Python extension module
-- A C++ compiler to build ddX solvation support
+- A C compiler to build the C API, Python extension or CUDA eigensolver
+- A C++ compiler to build ddX or GAMBITS from source
 - Python 3.6 or newer with the `CFFI`_ package installed to build the Python API
+
+Optional dependencies for GPU support are
+
+- NVIDIA CUDA toolkit headers and runtime library
+- cuBLAS and cuSOLVER libraries
+
+Enable the NVIDIA generalized eigensolver with ``-Dgpu=enabled``.
+Density matrix purification can be enabled independently with ``-Dgambits=true``.
 
 To setup a new build run
 
@@ -113,6 +129,11 @@ The required Fortran modules will be fetched automatically from the upstream rep
 .. note::
 
    For Intel Fortran oneAPI (2021 or newer) builds with MKL backend the ``-Dfortran_link_args=-qopenmp`` option has to be added.
+
+.. note::
+
+   Set ``CUDA_PATH`` to the toolkit directory if Meson cannot locate the CUDA libraries.
+   For GPU purification, build GAMBITS and LAHVA with CUDA support.
 
 .. tip::
 
@@ -154,9 +175,12 @@ The CMake build files usually do not provide a feature-complete build, but contr
 To setup a build the following software is required
 
 - A Fortran 2008 compliant compiler, like GCC Fortran and Intel Fortran classic
+- A C compiler, such as GCC or Clang
 - `cmake`_, version 3.14 or newer
 - `ninja`_, version 1.10 or newer
 - a linear algebra backend, like MKL or OpenBLAS
+
+The optional GPU eigensolver uses the NVIDIA CUDA Toolkit, including cuBLAS and cuSOLVER.
 
 Configure a new build with
 
@@ -167,6 +191,13 @@ Configure a new build with
 You can set the Fortran compiler in the ``FC`` environment variable.
 The installation location can be selected with the ``CMAKE_INSTALL_PREFIX``, GNU install directories are supported by default.
 CMake will automatically fetch the required Fortran modules, you can provide specific version in the *subprojects* directory which will be used instead.
+
+.. note::
+
+   Enable the cuSOLVER eigensolver with ``-DGPU=ON`` (CMake 3.17 or newer).
+   For density matrix purification add ``-DTBLITE_WITH_GAMBITS=ON`` and provide a C++ compiler.
+   Set ``CMAKE_PREFIX_PATH`` to the prefix containing GAMBITS and LAHVA when using installed packages.
+
 
 To run a build use
 
@@ -191,6 +222,7 @@ Fpm based build
 ~~~~~~~~~~~~~~~
 
 This projects supports building with the Fortran package manager (`fpm`_).
+There is currently no support for building with GPU offloading enabled with fpm.
 Create a new build by running
 
 .. code:: text

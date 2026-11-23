@@ -55,6 +55,8 @@ option(TBLITE_WITH_MPI "Enable distributing partitioned calculations over MPI ra
 option(TBLITE_WITH_SCALAPACK "Enable distributing the diagonalization over MPI ranks" ${WITH_SCALAPACK})
 option(TBLITE_WITH_TREXIO "Enable support for TREXIO output" ${WITH_TREXIO})
 option(TBLITE_WITH_TESTS "Enable compilation of unit tests" ${WITH_TESTS})
+option(GPU "Enable the NVIDIA cuSOLVER eigensolver" OFF)
+option(TBLITE_WITH_GAMBITS "Enable GAMBITS density matrix purification" OFF)
 set(TBLITE_USE_MCTCLIB TRUE)
 set(TBLITE_USE_MULTICHARGE TRUE)
 set(TBLITE_USE_TOMLF TRUE)

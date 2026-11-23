@@ -497,6 +497,7 @@ class Calculator(Structure):
         "temperature": library.set_calculator_temperature,
         "annealing": library.set_calculator_temperature_annealing,
         "verbosity": library.set_calculator_verbosity,
+        "solver": library.set_context_solver,
     }
     _getter = {
         "angular-momenta": library.get_calculator_angular_momenta,

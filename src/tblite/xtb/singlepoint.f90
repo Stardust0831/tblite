@@ -43,7 +43,7 @@ module tblite_xtb_singlepoint
    use tblite_scf_mixer_input, only : scf_version_to_string
    use tblite_scf_solver, only : solver_type
    use tblite_timer, only : timer_type, format_time
-   use tblite_wavefunction, only : wavefunction_type, get_density_matrix, &
+   use tblite_wavefunction, only : wavefunction_type, &
       & get_alpha_beta_occupation, &
       & magnet_to_updown, updown_to_magnet
    use tblite_xtb_calculator, only : xtb_calculator
@@ -383,6 +383,14 @@ subroutine xtb_singlepoint(ctx, mol, calc, wfn, accuracy, energy, gradient, sigm
       return
    end if
 
+   call solver%finish_wavefunction(wfn, ints%overlap, error)
+   call mpi_sync_error(error, ctx%comm)
+   if (allocated(error)) then
+      call ctx%set_error(error)
+      call ctx%delete_solver(solver)
+      return
+   end if
+
    if (grad) then
       if (allocated(calc%coulomb)) then
          call timer%push("coulomb")
@@ -406,7 +414,7 @@ subroutine xtb_singlepoint(ctx, mol, calc, wfn, accuracy, energy, gradient, sigm
       allocate(dEdcn(mol%nat))
       dEdcn(:) = 0.0_wp
 
-      allocate(wdensity(calc%bas%nao, size(wfn%density, 2), wfn%nspin))
+      allocate(wdensity, mold=wfn%density)
       call solver%get_wdensity(wfn%coeff, ints%overlap, wfn%emo, wfn%focc, wdensity, error)
       call mpi_sync_error(error, ctx%comm)
       if (allocated(error)) then

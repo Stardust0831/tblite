@@ -37,6 +37,7 @@ module tblite_driver_run
       & ascii_quadrupole_moments, tagged_result, json_results
    use tblite_param, only : param_record
    use tblite_post_processing_list, only : add_post_processing, post_processing_list
+   use tblite_purification_solver_context, only : purification_solver_context
    use tblite_results, only : results_type
    use tblite_scf_mixer_input, only : anneal_input
    use tblite_solvation, only : new_solvation, new_solvation_cds, new_solvation_shift, solvation_type
@@ -89,7 +90,11 @@ subroutine run_main(config, error)
    class(post_processing_list), allocatable :: post_proc
 
    ctx%terminal = context_terminal(config%color)
-   ctx%solver = lapack_solver(config%solver)
+   if (allocated(config%dmp_input)) then
+      ctx%solver = purification_solver_context(config%dmp_input)
+   else
+      ctx%solver = lapack_solver(config%solver)
+   end if
 
    ! a single rank owns the complete work, so this is a no-op outside mpiexec
    if (tblite_has_mpi) then
@@ -99,7 +104,6 @@ subroutine run_main(config, error)
 
    verbosity = config%verbosity
    if (ctx%partition%get_part() > 0) verbosity = 0
-
    if (config%input == "-") then
       if (allocated(config%input_format)) then
          call read_structure(mol, input_unit, config%input_format, error)

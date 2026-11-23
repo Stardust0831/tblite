@@ -413,6 +413,10 @@ subroutine next_density(wfn, solver, ints, ts, error)
    integer :: spin
 
    call solver%get_density(wfn%coeff, ints%overlap, wfn%emo, wfn%focc, wfn%density, error)
+   if (allocated(error)) then
+      ts = 0.0_wp
+      return
+   end if
    do spin = 1, 2
       call get_electronic_entropy(wfn%focc(:, spin), wfn%kt, stmp(spin))
    end do

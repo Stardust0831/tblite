@@ -21,6 +21,7 @@
 module tblite_lapack_solver
    use mctc_env, only : wp
    use tblite_context_solver, only : context_solver
+   use tblite_cusolver_sygvd, only : sygvd_cusolver, new_sygvd_gpu
    use tblite_lapack_scalapack, only : psygvd_solver, new_psygvd, &
       & distribute_diagonalization
    use tblite_lapack_sygvd, only : sygvd_solver, new_sygvd
@@ -38,6 +39,7 @@ module tblite_lapack_solver
       integer :: gvd = 1
       !> Relatively robust solver
       integer :: gvr = 2
+      integer :: gvd_cusolver = 3
    end type enum_lapack
 
    !> Actual enumerator of possible solvers
@@ -73,6 +75,7 @@ logical function distributed_columns(self, n, comm) result(distribute)
    ! arrays. Such factories must explicitly opt in to the new storage layout.
    select type(self)
    type is (lapack_solver)
+      if (self%algorithm == lapack_algorithm%gvd_cusolver) return
       if (present(comm)) distribute = distribute_diagonalization(n, comm)
    end select
 end function distributed_columns
@@ -95,7 +98,7 @@ subroutine new(self, solver, overlap, nel, kt, comm)
 
    ! the replicated diagonalization is the bottleneck of a distributed run
    if (present(comm)) then
-      if (distribute_diagonalization(size(overlap, 1), comm)) then
+      if (self%distributed_columns(size(overlap, 1), comm)) then
          block
             type(psygvd_solver), allocatable :: tmp
             allocate(tmp)
@@ -119,6 +122,13 @@ subroutine new(self, solver, overlap, nel, kt, comm)
          type(sygvr_solver), allocatable :: tmp
          allocate(tmp)
          call new_sygvr(tmp, overlap, nel, kt)
+         call move_alloc(tmp, solver)
+      end block
+   case(lapack_algorithm%gvd_cusolver)
+      block
+         type(sygvd_cusolver), allocatable :: tmp
+         allocate(tmp)
+         call new_sygvd_gpu(tmp, overlap, nel, kt)
          call move_alloc(tmp, solver)
       end block
    case default
